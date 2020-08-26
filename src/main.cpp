@@ -32,6 +32,44 @@ byte rel[] = {RELAY1, RELAY2, RELAY3, RELAY4};
 // Runtime Vars
 char pstate[COUNT + 1];
 
+void setRel(int relno, uint8_t relst)
+{
+  digitalWrite(rel[relno], relst);
+  if (relst == HIGH)
+  {
+    pstate[relno] = '!';
+    Blynk.virtualWrite(relno + 1, HIGH);
+  }
+  else
+  {
+    pstate[relno] = 'o';
+    Blynk.virtualWrite(relno + 1, LOW);
+  }
+  SPIFFS.remove(filename);
+  File f = SPIFFS.open(filename, FILE_WRITE);
+
+  if (!f)
+  {
+    Serial.println("file open failed");
+  }
+  else
+    f.print(pstate);
+  f.close();
+  Serial.println(pstate); // FOR DEBUG
+}
+
+void settle(int wat)
+{
+  if (pstate[wat] == 'o')
+  {
+    setRel(wat, HIGH);
+  }
+  else if (pstate[wat] == '!')
+  {
+    setRel(wat, LOW);
+  }
+}
+
 BLYNK_APP_CONNECTED()
 { // MOSTLY USELESS
   for (int i = 0; i < COUNT; i++)
@@ -203,40 +241,4 @@ void loop()
   }
 }
 
-void setRel(int relno, uint8_t relst)
-{
-  digitalWrite(rel[relno], relst);
-  if (relst == HIGH)
-  {
-    pstate[relno] = '!';
-    Blynk.virtualWrite(relno + 1, HIGH);
-  }
-  else
-  {
-    pstate[relno] = 'o';
-    Blynk.virtualWrite(relno + 1, LOW);
-  }
-  SPIFFS.remove(filename);
-  File f = SPIFFS.open(filename, FILE_WRITE);
 
-  if (!f)
-  {
-    Serial.println("file open failed");
-  }
-  else
-    f.print(pstate);
-  f.close();
-  Serial.println(pstate); // FOR DEBUG
-}
-
-void settle(int wat)
-{
-  if (pstate[wat] == 'o')
-  {
-    setRel(wat, HIGH);
-  }
-  else if (pstate[wat] == '!')
-  {
-    setRel(wat, LOW);
-  }
-}
