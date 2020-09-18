@@ -5,7 +5,7 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <BlynkSimpleEsp32.h>
-#include <SPIFFS.h>
+#include <EEPROM.h>
 #include <DNSServer.h>
 #include <WebServer.h>
 #include <WiFiManager.h>
@@ -23,48 +23,45 @@
 #define BTN3 26
 #define BTN4 14
 
-const char *filename = "/file.txt";
-const char auth[] = " Blynk Auth Code ";          // Put your device auth code from blynk
+const char auth[] = "_kcObsbHJcTos5cD5kCTss_PZt1xeACQ";          // Put your device auth code from blynk
 
 // H/W PinSet
 byte rel[] = {RELAY1, RELAY2, RELAY3, RELAY4};
 
 // Runtime Vars
-char pstate[COUNT + 1];
+int pstate[COUNT + 1];
+
+void printState() {
+  for ( int i = 0; i <= COUNT; i++ )
+    Serial.print(pstate[i]);
+  Serial.println();
+}
 
 void setRel(int relno, uint8_t relst)
 {
   digitalWrite(rel[relno], relst);
   if (relst == HIGH)
   {
-    pstate[relno] = '!';
+    pstate[relno] = 1;
     Blynk.virtualWrite(relno + 1, HIGH);
   }
   else
   {
-    pstate[relno] = 'o';
+    pstate[relno] = 0;
     Blynk.virtualWrite(relno + 1, LOW);
   }
-  SPIFFS.remove(filename);
-  File f = SPIFFS.open(filename, FILE_WRITE);
-
-  if (!f)
-  {
-    Serial.println("file open failed");
-  }
-  else
-    f.print(pstate);
-  f.close();
-  Serial.println(pstate); // FOR DEBUG
+  EEPROM.write(relno, pstate[relno]);
+  EEPROM.commit();
+  printState(); // FOR DEBUG
 }
 
 void settle(int wat)
 {
-  if (pstate[wat] == 'o')
+  if (pstate[wat] == 0)
   {
     setRel(wat, HIGH);
   }
-  else if (pstate[wat] == '!')
+  else if (pstate[wat] == 1)
   {
     setRel(wat, LOW);
   }
@@ -74,11 +71,11 @@ BLYNK_APP_CONNECTED()
 { // MOSTLY USELESS
   for (int i = 0; i < COUNT; i++)
   {
-    if (pstate[i] == '!')
+    if (pstate[i] == 1)
     {
       Blynk.virtualWrite(i + 1, HIGH);
     }
-    else if (pstate[i] == 'o')
+    else if (pstate[i] == 0)
     {
       Blynk.virtualWrite(i + 1, LOW);
     }
@@ -139,11 +136,7 @@ BLYNK_WRITE(V4)
 
 BLYNK_WRITE(V8) // Reset Function    for V8 pin
 {
-  pstate[COUNT] = 'n';
-  SPIFFS.remove(filename);
-  File f = SPIFFS.open(filename, FILE_WRITE);
-  f.print(pstate);
-  f.close();
+  pstate[COUNT] = 0;
   Serial.println("Wifi Reset Initiated");
   Serial.println("Restarting in 3 Seconds");
   delay(3000);
@@ -170,47 +163,34 @@ void setup()
   // wifiManager.resetSettings();
   WiFi.begin(WiFi.SSID().c_str(), WiFi.psk().c_str());
   Serial.begin(115200);
-  if (SPIFFS.begin())
-  {
-    Serial.println("SPIFFS Initialize....ok");
-  }
-  else
-  {
-    Serial.println("SPIFFS Initialization...failed");
-  }
-
-  File f = SPIFFS.open(filename);
-
-  if (!f)
-  {
-    Serial.println(" File open failed ");
-  }
+  EEPROM.begin(COUNT + 1);
 
   for (int i = 0; i < COUNT; i++)
   {
     pinMode(rel[i], OUTPUT);
 
-    if ((char)f.read() == '!')
+    if (EEPROM.read(i) == 1)
     {
       digitalWrite(rel[i], HIGH);
       Blynk.virtualWrite(i + 1, HIGH);
-      pstate[i] = '!';
+      pstate[i] = 1;
     }
     else
     {
       digitalWrite(rel[i], LOW);
       Blynk.virtualWrite(i + 1, LOW);
-      pstate[i] = 'o';
+      pstate[i] = 0;
     }
   }
   Serial.println("\n\n");
-  Serial.println(pstate);
-  if ((char)f.read() != 's')
+
+  printState();
+
+  if (EEPROM.read(COUNT) != 5)
   {
-    wifiManager.autoConnect("Smart Home");
+    wifiManager.autoConnect("Smart Switch");
     Serial.println("*****************************************");
   }
-  f.close();
 
   Blynk.config(auth);
   pinMode(LED, OUTPUT);
@@ -229,8 +209,11 @@ void loop()
   {
     digitalWrite(LED, LOW);
     Blynk.run();
-    if (pstate[COUNT] != 's')
-      pstate[COUNT] = 's'; // Flag Setup Complete.
+    if (pstate[COUNT] != 5) {
+      pstate[COUNT] = 5; // Flag Setup Complete.
+      EEPROM.write(COUNT, 5);
+      EEPROM.commit();
+    }
   }
   else
   {
