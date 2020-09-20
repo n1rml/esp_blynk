@@ -8,10 +8,12 @@
 #include <EEPROM.h>
 #include <DNSServer.h>
 #include <WebServer.h>
-#include <WiFiManager.h>
+#include <ESP_WiFiManager.h>
 
 #define LED 2
 #define COUNT 4
+
+#define ZCP 13
 
 #define RELAY1 23
 #define RELAY2 22
@@ -30,11 +32,23 @@ byte rel[] = {RELAY1, RELAY2, RELAY3, RELAY4};
 
 // Runtime Vars
 int pstate[COUNT + 1];
+unsigned int dim = 0;
 
 void printState() {
   for ( int i = 0; i <= COUNT; i++ )
     Serial.print(pstate[i]);
   Serial.println();
+}
+
+void zcISR() {
+  dim = 10000 - (2000 * pstate[3]);
+  if (dim != 0) {
+    delayMicroseconds(dim);
+    digitalWrite(RELAY4, HIGH);
+    
+    delayMicroseconds(50);
+    digitalWrite(RELAY4, LOW);
+  }
 }
 
 void setRel(int relno, uint8_t relst)
@@ -65,6 +79,7 @@ void settle(int wat)
   {
     setRel(wat, LOW);
   }
+  delayMicroseconds(50);
 }
 
 BLYNK_APP_CONNECTED()
@@ -124,14 +139,11 @@ BLYNK_WRITE(V3)
 BLYNK_WRITE(V4)
 {
   int pinValue = param.asInt();
-  if (pinValue == 1)
-  {
-    setRel(3, HIGH);
-  }
-  else
+  if (pinValue == 0)
   {
     setRel(3, LOW);
   }
+  pstate[3] = pinValue;
 }
 
 BLYNK_WRITE(V8) // Reset Function    for V8 pin
@@ -153,33 +165,32 @@ void ISR2(){
 void ISR3(){
   settle(2);
 }
-void ISR4(){
-  settle(3);
-}
+// void ISR4(){
+//   settle(3);
+// }
 
 void setup()
 {
-  WiFiManager wifiManager;
+  ESP_WiFiManager wifiManager;
   // wifiManager.resetSettings();
   WiFi.begin(WiFi.SSID().c_str(), WiFi.psk().c_str());
   Serial.begin(115200);
   EEPROM.begin(COUNT + 1);
 
+  pinMode(ZCP, INPUT_PULLUP);
+
   for (int i = 0; i < COUNT; i++)
   {
     pinMode(rel[i], OUTPUT);
-
-    if (EEPROM.read(i) == 1)
+    pstate[i] = EEPROM.read(i);
+    if (i < 3)
     {
-      digitalWrite(rel[i], HIGH);
-      Blynk.virtualWrite(i + 1, HIGH);
-      pstate[i] = 1;
+      digitalWrite(rel[i], pstate[i]);
+      Blynk.virtualWrite(i + 1, pstate[i]);
     }
     else
     {
-      digitalWrite(rel[i], LOW);
-      Blynk.virtualWrite(i + 1, LOW);
-      pstate[i] = 0;
+      Blynk.virtualWrite(i + 1, pstate[i]);
     }
   }
   Serial.println("\n\n");
@@ -196,10 +207,11 @@ void setup()
   pinMode(LED, OUTPUT);
   digitalWrite(LED, HIGH);
 
-  attachInterrupt(digitalPinToInterrupt(BTN1), ISR1, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(BTN1), ISR1, CHANGE);     // Digital button Interrupts 
   attachInterrupt(digitalPinToInterrupt(BTN2), ISR2, CHANGE);
   attachInterrupt(digitalPinToInterrupt(BTN3), ISR3, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(BTN4), ISR4, CHANGE);
+
+  attachInterrupt(digitalPinToInterrupt(ZCP), zcISR, FALLING);    // ZeroCross Interrupt
 
 }
 
@@ -210,7 +222,7 @@ void loop()
     digitalWrite(LED, LOW);
     Blynk.run();
     if (pstate[COUNT] != 5) {
-      pstate[COUNT] = 5; // Flag Setup Complete.
+      pstate[COUNT] = 5;      // Set Connected Flag
       EEPROM.write(COUNT, 5);
       EEPROM.commit();
     }

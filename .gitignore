@@ -1,4 +1,6 @@
-.pio
+.pio/build
 .vscode
 test
 .git
+include
+lib
