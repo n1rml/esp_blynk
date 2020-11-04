@@ -25,7 +25,7 @@
 #define BTN3 26
 #define BTN4 14
 
-const char auth[] = "_kcObsbHJcTos5cD5kCTss_PZt1xeACQ";          // Put your device auth code from blynk
+const char auth[] = "Blynk_Auth_Code";          // Put your device auth code from blynk
 
 // H/W PinSet
 byte rel[] = {RELAY1, RELAY2, RELAY3, RELAY4};
@@ -155,7 +155,6 @@ BLYNK_WRITE(V8) // Reset Function    for V8 pin
   ESP.restart();
 }
 
-// It looks a bit silly, but only way to use args in interrupts.
 void ISR1(){
   settle(0);
 }
